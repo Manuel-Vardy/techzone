@@ -56,7 +56,7 @@ const ProductDetails = () => {
   const relatedProducts = laptops.filter((l) => l.id !== laptop.id).slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-0">
+    <div className="min-h-screen bg-background pb-20 md:pb-0 w-full overflow-x-hidden">
       <Header />
 
       <main className="container py-6 md:py-10">

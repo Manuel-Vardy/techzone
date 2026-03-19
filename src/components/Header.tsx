@@ -1,29 +1,51 @@
-import { Search, ShoppingCart, Menu, User, Heart } from "lucide-react";
+import { Search, ShoppingCart, Menu, User, Heart, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 
 const navLinks = [
-  { name: "Home", href: "/#home" },
+  { name: "Home", href: "/" },
   { name: "Products", href: "/#products" },
   { name: "Services", href: "/#services" },
-  { name: "Testimonials", href: "/#testimonials" },
+  { name: "Reviews", href: "/#testimonials" },
   { name: "Contact", href: "/#contact" },
 ];
 
 export const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { cartCount } = useCart();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success("Logged out successfully");
+      navigate("/");
+    } catch (error) {
+      toast.error("Failed to logout");
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       {/* Promo Banner */}
-      <div className="hero-gradient py-2">
-        <div className="container flex items-center justify-center gap-2">
-          <span className="text-xs md:text-sm font-medium text-primary-foreground">
+      <div className="hero-gradient py-2 overflow-hidden w-full">
+        <div className="container flex items-center justify-center gap-2 whitespace-nowrap">
+          <span className="text-xs md:text-sm font-medium text-primary-foreground truncate px-4">
             🚀 Free Shipping Worldwide on Orders Above GH₵500 • Limited Time Offer!
           </span>
         </div>
@@ -66,12 +88,41 @@ export const Header = () => {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="hidden md:flex">
-            <Heart className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="hidden md:flex">
-            <User className="h-5 w-5" />
-          </Button>
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="hidden md:flex">
+                  <User className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[200px]">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">Your Account</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/#profile" className="cursor-pointer">Profile</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/#wishlist" className="cursor-pointer">Wishlist</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Link to="/login" className="hidden md:block">
+              <Button variant="ghost" size="icon">
+                <User className="h-5 w-5" />
+              </Button>
+            </Link>
+          )}
           <Link to="/cart">
             <Button variant="ghost" size="icon" className="relative">
               <ShoppingCart className="h-5 w-5" />
@@ -108,9 +159,10 @@ export const Header = () => {
                       key={link.name}
                       to={link.href}
                       onClick={() => setIsOpen(false)}
-                      className="text-lg font-medium text-foreground hover:text-primary transition-colors"
+                      className="text-lg font-semibold text-foreground hover:text-primary transition-all flex items-center justify-between group"
                     >
                       {link.name}
+                      <span className="h-px w-0 bg-primary transition-all group-hover:w-8" />
                     </Link>
                   ))}
                 </nav>

@@ -16,6 +16,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useAuth } from "@/context/AuthContext";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 type CheckoutFormValues = {
   name: string;
@@ -29,7 +32,16 @@ type CheckoutFormValues = {
 
 const CheckoutPage = () => {
   const { cartItems, clearCart } = useCart();
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      toast.error("Please login to proceed with checkout");
+      navigate("/login");
+    }
+  }, [user, loading, navigate]);
 
   const form = useForm<CheckoutFormValues>({
     defaultValues: {
@@ -71,7 +83,7 @@ const CheckoutPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background w-full overflow-x-hidden">
       <Header />
       <main className="container py-12 md:py-20">
         <h1 className="text-3xl md:text-4xl font-bold mb-6">Checkout</h1>

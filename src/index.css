@@ -101,9 +101,26 @@
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground font-sans antialiased;
+  html {
+    @apply bg-background text-foreground antialiased;
     font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+    height: 100%;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+    position: relative;
+    width: 100%;
+    min-height: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    width: 100%;
   }
 
   h1, h2, h3, h4, h5, h6 {
