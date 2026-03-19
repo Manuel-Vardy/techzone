@@ -1,234 +1,254 @@
 import { useState, useEffect } from "react";
-import { db, storage } from "@/lib/firebase";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
-  orderBy 
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  onSnapshot,
+  query,
+  orderBy,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Laptop } from "@/data/laptops";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { 
-  Plus, 
-  Trash2, 
-  Edit2, 
-  Image as ImageIcon, 
-  Loader2, 
-  LayoutDashboard, 
-  Package, 
-  LogOut,
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  Loader2,
+  LayoutDashboard,
+  Package,
   ChevronLeft,
-  X
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+
+// Upload image to ImgBB (free, no Firebase Storage needed)
+const uploadToImgBB = async (file: File): Promise<string> => {
+  const apiKey = import.meta.env.VITE_IMGBB_API_KEY;
+  if (!apiKey || apiKey === "your_imgbb_api_key_here") {
+    throw new Error("ImgBB API key not set. Please add VITE_IMGBB_API_KEY to your .env file.");
+  }
+  const formData = new FormData();
+  formData.append("image", file);
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error?.message || "ImgBB upload failed");
+  return data.data.url as string;
+};
+
+interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  originalPrice?: number | null;
+  badge?: string;
+  rating: number;
+  reviews: number;
+  images: string[];
+  specs: {
+    processor: string;
+    ram: string;
+    storage: string;
+    display: string;
+    graphics: string;
+  };
+  updatedAt?: string;
+}
+
+const emptyForm = {
+  name: "",
+  brand: "TechZone",
+  price: "",
+  originalPrice: "",
+  badge: "",
+  rating: "4.5",
+  reviews: "0",
+  specs: {
+    processor: "",
+    ram: "",
+    storage: "",
+    display: "",
+    graphics: "",
+  },
+};
 
 export default function AdminCMS() {
-  const [products, setProducts] = useState<Laptop[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  // Form State
-  const [formData, setFormData] = useState({
-    name: "",
-    brand: "TechZone",
-    price: "",
-    originalPrice: "",
-    badge: "",
-    rating: "4.5",
-    reviews: "0",
-    specs: {
-      processor: "",
-      ram: "",
-      storage: "",
-      display: "",
-      graphics: ""
-    }
-  });
-  const [images, setImages] = useState<File[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
 
+  // ─── Real-time listener ────────────────────────────────────
   useEffect(() => {
-    fetchProducts();
+    const q = query(collection(db, "products"), orderBy("updatedAt", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Product[];
+        setProducts(data);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Firestore listener error:", err);
+        toast.error(`DB error: ${err.message}`);
+        setLoading(false);
+      }
+    );
+    return () => unsub();
   }, []);
 
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, "products"), orderBy("updatedAt", "desc"));
-      const querySnapshot = await getDocs(q);
-      const items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Laptop[];
-      setProducts(items);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-      toast.error("Failed to load products");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // ─── Image handling ────────────────────────────────────────
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      setImages(prev => [...prev, ...files]);
-      
-      const newPreviews = files.map(file => URL.createObjectURL(file));
-      setImagePreviews(prev => [...prev, ...newPreviews]);
-    }
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+    setImageFiles((prev) => [...prev, ...files]);
+    setImagePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
   };
 
-  const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
-    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  const removeNewImage = (i: number) => {
+    setImageFiles((prev) => prev.filter((_, idx) => idx !== i));
+    setImagePreviews((prev) => prev.filter((_, idx) => idx !== i));
   };
 
+  const removeExistingImage = (i: number) => {
+    setExistingImages((prev) => prev.filter((_, idx) => idx !== i));
+  };
+
+  // ─── Form submit ───────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (images.length === 0 && !editingId) {
-      toast.error("Please add at least one image");
+
+    const allImages = [...existingImages, ...imagePreviews];
+    if (allImages.length === 0) {
+      toast.error("Please add at least one image.");
       return;
     }
 
-    setIsUploading(true);
-    const toastId = toast.loading("Starting product save...");
-    
+    setSaving(true);
+    const tid = toast.loading("Saving product…");
+
     try {
-      // 1. Upload Images
-      const imageUrls: string[] = [];
-      if (images.length > 0) {
-        toast.loading(`Uploading ${images.length} image(s)...`, { id: toastId });
-        for (let i = 0; i < images.length; i++) {
-          const image = images[i];
-          const storageRef = ref(storage, `products/${Date.now()}_${image.name}`);
-          const snapshot = await uploadBytes(storageRef, image);
-          const url = await getDownloadURL(snapshot.ref);
-          imageUrls.push(url);
-          toast.loading(`Uploaded image ${i + 1} of ${images.length}`, { id: toastId });
-        }
+      // Upload new files to ImgBB (free, no Firebase Storage needed)
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < imageFiles.length; i++) {
+        toast.loading(`Uploading image ${i + 1} / ${imageFiles.length}…`, { id: tid });
+        const url = await uploadToImgBB(imageFiles[i]);
+        uploadedUrls.push(url);
       }
 
-      // 2. Prepare Data
-      toast.loading("Preparing product data...", { id: toastId });
-      const parsedPrice = parseFloat(formData.price);
-      const parsedRating = parseFloat(formData.rating);
-      const parsedReviews = parseInt(formData.reviews);
-
-      if (isNaN(parsedPrice)) throw new Error("Invalid Price value");
-
-      const productData = {
-        name: formData.name,
-        brand: formData.brand,
-        price: parsedPrice,
-        originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : null,
-        badge: formData.badge || "",
-        rating: isNaN(parsedRating) ? 4.5 : parsedRating,
-        reviews: isNaN(parsedReviews) ? 0 : parsedReviews,
+      const payload = {
+        name: form.name.trim(),
+        brand: form.brand.trim() || "TechZone",
+        price: parseFloat(form.price) || 0,
+        originalPrice: form.originalPrice ? parseFloat(form.originalPrice) : null,
+        badge: form.badge.trim(),
+        rating: parseFloat(form.rating) || 4.5,
+        reviews: parseInt(form.reviews) || 0,
         specs: {
-          processor: formData.specs.processor || "N/A",
-          ram: formData.specs.ram || "N/A",
-          storage: formData.specs.storage || "N/A",
-          display: formData.specs.display || "N/A",
-          graphics: formData.specs.graphics || "N/A"
+          processor: form.specs.processor.trim() || "N/A",
+          ram: form.specs.ram.trim() || "N/A",
+          storage: form.specs.storage.trim() || "N/A",
+          display: form.specs.display.trim() || "N/A",
+          graphics: form.specs.graphics.trim() || "N/A",
         },
-        images: editingId 
-          ? [...(products.find(p => p.id === editingId)?.images || []), ...imageUrls] 
-          : imageUrls,
-        updatedAt: new Date().toISOString()
+        images: [...existingImages, ...uploadedUrls],
+        updatedAt: new Date().toISOString(),
       };
 
-      // 3. Save to Firestore
-      toast.loading("Writing to database...", { id: toastId });
+      toast.loading("Writing to database…", { id: tid });
+
       if (editingId) {
-        await updateDoc(doc(db, "products", editingId), productData);
-        toast.success("Product updated successfully!", { id: toastId });
+        await updateDoc(doc(db, "products", editingId), payload);
+        toast.success("Product updated!", { id: tid });
       } else {
-        await addDoc(collection(db, "products"), productData);
-        toast.success(`${productData.name} added to inventory!`, { id: toastId });
+        await addDoc(collection(db, "products"), payload);
+        toast.success(`${payload.name} added!`, { id: tid });
       }
 
       resetForm();
-      fetchProducts();
-    } catch (error: any) {
-      console.error("Error saving product:", error);
-      let message = error.message || "Unknown error";
-      
-      if (error.code === 'permission-denied') {
-        message = "Permission denied. Check Firestore rules.";
-      } else if (error.code === 'storage/unauthorized') {
-        message = "Storage permission denied. Check Storage rules.";
-      }
-      
-      toast.error(`Save failed: ${message}`, { id: toastId });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Save failed: ${err.message}`, { id: tid });
     } finally {
-      setIsUploading(false);
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this product?")) {
-      try {
-        await deleteDoc(doc(db, "products", id));
-        toast.success("Product deleted");
-        fetchProducts();
-      } catch (error) {
-        toast.error("Delete failed");
-      }
+  // ─── Delete ────────────────────────────────────────────────
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"?`)) return;
+    try {
+      await deleteDoc(doc(db, "products", id));
+      toast.success(`"${name}" deleted.`);
+    } catch (err: any) {
+      toast.error(`Delete failed: ${err.message}`);
     }
+  };
+
+  // ─── Edit ──────────────────────────────────────────────────
+  const handleEdit = (p: Product) => {
+    setEditingId(p.id);
+    setForm({
+      name: p.name,
+      brand: p.brand,
+      price: String(p.price),
+      originalPrice: p.originalPrice ? String(p.originalPrice) : "",
+      badge: p.badge || "",
+      rating: String(p.rating),
+      reviews: String(p.reviews),
+      specs: { ...p.specs },
+    });
+    setExistingImages(p.images);
+    setImageFiles([]);
+    setImagePreviews([]);
+    setShowForm(true);
   };
 
   const resetForm = () => {
-    setFormData({
-      name: "",
-      brand: "TechZone",
-      price: "",
-      originalPrice: "",
-      badge: "",
-      rating: "4.5",
-      reviews: "0",
-      specs: {
-        processor: "",
-        ram: "",
-        storage: "",
-        display: "",
-        graphics: ""
-      }
-    });
-    setImages([]);
+    setForm(emptyForm);
+    setImageFiles([]);
     setImagePreviews([]);
+    setExistingImages([]);
     setEditingId(null);
-    setIsAdding(false);
+    setShowForm(false);
   };
 
+  // ─── Spec helper ───────────────────────────────────────────
+  const setSpec = (k: keyof typeof form.specs, v: string) =>
+    setForm((f) => ({ ...f, specs: { ...f.specs, [k]: v } }));
+
+  // ─── UI ────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex">
+    <div className="min-h-screen bg-[#F8F9FA] flex font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-[#14213D] text-white flex flex-col hidden md:flex">
-        <div className="p-6 border-b border-white/10">
-          <Link to="/" className="flex items-center gap-2 font-display font-bold text-xl">
-            <LayoutDashboard className="h-6 w-6 text-[#FCA331]" />
-            TechZone CMS
-          </Link>
+      <aside className="w-60 bg-[#14213D] text-white hidden md:flex flex-col shrink-0">
+        <div className="p-5 border-b border-white/10 flex items-center gap-2">
+          <LayoutDashboard className="h-5 w-5 text-[#FCA331]" />
+          <span className="font-bold text-lg">TechZone CMS</span>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <button className="w-full flex items-center gap-3 px-4 py-3 bg-[#FCA331] text-[#14213D] rounded-lg font-bold transition-all">
+        <nav className="flex-1 p-4">
+          <div className="flex items-center gap-3 px-4 py-3 bg-[#FCA331] text-[#14213D] rounded-lg font-bold">
             <Package className="h-5 w-5" />
             Inventory
-          </button>
+          </div>
         </nav>
         <div className="p-4 border-t border-white/10">
           <Link to="/">
-            <Button variant="ghost" className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10">
+            <Button variant="ghost" className="w-full justify-start text-white/60 hover:text-white hover:bg-white/10">
               <ChevronLeft className="h-4 w-4 mr-2" />
               Back to Store
             </Button>
@@ -236,249 +256,265 @@ export default function AdminCMS() {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main */}
       <main className="flex-1 overflow-y-auto">
-        <header className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+        {/* Header bar */}
+        <header className="bg-white border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
           <div>
-            <h1 className="text-2xl font-black text-[#14213D]">Product Management</h1>
-            <p className="text-gray-500 text-sm">Add and manage your TechZone inventory</p>
+            <h1 className="text-xl font-black text-[#14213D]">Product Management</h1>
+            <p className="text-gray-400 text-xs">{products.length} item(s) in inventory</p>
           </div>
-          <Button 
-            className="bg-[#FCA331] text-[#14213D] font-bold hover:bg-[#FCA331]/90"
-            onClick={() => setIsAdding(true)}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add New Laptop
-          </Button>
+          {!showForm && (
+            <Button
+              className="bg-[#FCA331] text-[#14213D] font-bold hover:bg-[#FCA331]/90"
+              onClick={() => setShowForm(true)}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Laptop
+            </Button>
+          )}
         </header>
 
-        <div className="p-8">
-          {isAdding ? (
-            <Card className="max-w-3xl border-none shadow-xl overflow-hidden p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-[#14213D]">{editingId ? 'Edit Product' : 'Add New Laptop'}</h2>
+        <div className="p-6">
+          {/* ── Add / Edit Form ── */}
+          {showForm && (
+            <div className="bg-white rounded-xl shadow-md p-6 mb-6 max-w-3xl">
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="text-lg font-bold text-[#14213D]">
+                  {editingId ? "Edit Product" : "Add New Laptop"}
+                </h2>
                 <Button variant="ghost" size="icon" onClick={resetForm}>
                   <X className="h-5 w-5" />
                 </Button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold uppercase tracking-wider text-gray-500">Laptop Name</label>
-                    <Input 
-                      required 
-                      value={formData.name}
-                      onChange={e => setFormData({...formData, name: e.target.value})}
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Basic Info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 md:col-span-1">
+                    <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">Name *</label>
+                    <Input
+                      required
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
                       placeholder="e.g. ProBook Elite X1"
-                      className="border-gray-200 focus:border-[#FCA331] ring-0 focus-visible:ring-[#FCA331]"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold uppercase tracking-wider text-gray-500">Brand</label>
-                    <Input 
-                      required 
-                      value={formData.brand}
-                      onChange={e => setFormData({...formData, brand: e.target.value})}
+                  <div>
+                    <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">Brand</label>
+                    <Input
+                      value={form.brand}
+                      onChange={(e) => setForm({ ...form, brand: e.target.value })}
                       placeholder="TechZone"
-                      className="border-gray-200 focus:border-[#FCA331]"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold uppercase tracking-wider text-gray-500">Price (GH₵)</label>
-                    <Input 
-                      required 
+                  <div>
+                    <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">Price (GH₵) *</label>
+                    <Input
+                      required
                       type="number"
-                      value={formData.price}
-                      onChange={e => setFormData({...formData, price: e.target.value})}
+                      min="0"
+                      value={form.price}
+                      onChange={(e) => setForm({ ...form, price: e.target.value })}
                       placeholder="1299"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold uppercase tracking-wider text-gray-500">Original Price (optional)</label>
-                    <Input 
+                  <div>
+                    <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">Original Price</label>
+                    <Input
                       type="number"
-                      value={formData.originalPrice}
-                      onChange={e => setFormData({...formData, originalPrice: e.target.value})}
+                      min="0"
+                      value={form.originalPrice}
+                      onChange={(e) => setForm({ ...form, originalPrice: e.target.value })}
                       placeholder="1599"
                     />
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="font-bold text-[#14213D] border-b pb-2">Technical Specifications</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Input 
-                      required 
-                      placeholder="Processor"
-                      value={formData.specs.processor}
-                      onChange={e => setFormData({...formData, specs: {...formData.specs, processor: e.target.value}})}
-                    />
-                    <Input 
-                      required 
-                      placeholder="RAM" 
-                      value={formData.specs.ram}
-                      onChange={e => setFormData({...formData, specs: {...formData.specs, ram: e.target.value}})}
-                    />
-                    <Input 
-                      required 
-                      placeholder="Storage" 
-                      value={formData.specs.storage}
-                      onChange={e => setFormData({...formData, specs: {...formData.specs, storage: e.target.value}})}
-                    />
-                    <Input 
-                      required 
-                      placeholder="Display" 
-                      value={formData.specs.display}
-                      onChange={e => setFormData({...formData, specs: {...formData.specs, display: e.target.value}})}
-                    />
-                    <Input 
-                      required 
-                      placeholder="Graphics" 
-                      value={formData.specs.graphics}
-                      onChange={e => setFormData({...formData, specs: {...formData.specs, graphics: e.target.value}})}
-                    />
-                    <Input 
-                      placeholder="Badge (e.g. New)" 
-                      value={formData.badge}
-                      onChange={e => setFormData({...formData, badge: e.target.value})}
+                  <div>
+                    <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">Badge</label>
+                    <Input
+                      value={form.badge}
+                      onChange={(e) => setForm({ ...form, badge: e.target.value })}
+                      placeholder="New / Best Seller"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <h3 className="font-bold text-[#14213D] border-b pb-2">Images</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {imagePreviews.map((src, i) => (
-                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden group">
-                        <img src={src} className="h-full w-full object-cover" />
-                        <button 
+                {/* Specs */}
+                <div>
+                  <p className="text-xs font-bold uppercase text-gray-400 mb-2 border-b pb-1">Specifications</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {(["processor", "ram", "storage", "display", "graphics"] as const).map((k) => (
+                      <div key={k}>
+                        <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">{k}</label>
+                        <Input
+                          value={form.specs[k]}
+                          onChange={(e) => setSpec(k, e.target.value)}
+                          placeholder={k}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Images */}
+                <div>
+                  <p className="text-xs font-bold uppercase text-gray-400 mb-2 border-b pb-1">
+                    Images * (at least 1)
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {/* Existing images (when editing) */}
+                    {existingImages.map((src, i) => (
+                      <div key={`ex-${i}`} className="relative w-20 h-20 rounded overflow-hidden group">
+                        <img src={src} className="w-full h-full object-cover" />
+                        <button
                           type="button"
-                          onClick={() => removeImage(i)}
-                          className="absolute top-1 right-1 h-6 w-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeExistingImage(i)}
+                          className="absolute top-0.5 right-0.5 h-5 w-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100"
                         >
                           <X className="h-3 w-3" />
                         </button>
                       </div>
                     ))}
-                    <label className="aspect-square border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center hover:border-[#FCA331] hover:bg-[#FCA331]/5 cursor-pointer transition-all">
-                      <ImageIcon className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-xs font-bold text-gray-500 uppercase tracking-tighter">Upload</span>
-                      <input type="file" multiple accept="image/*" onChange={handleImageChange} className="hidden" />
+
+                    {/* New image previews */}
+                    {imagePreviews.map((src, i) => (
+                      <div key={`new-${i}`} className="relative w-20 h-20 rounded overflow-hidden group border-2 border-[#FCA331]">
+                        <img src={src} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeNewImage(i)}
+                          className="absolute top-0.5 right-0.5 h-5 w-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Upload button */}
+                    <label className="w-20 h-20 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center cursor-pointer hover:border-[#FCA331] transition-colors">
+                      <ImageIcon className="h-6 w-6 text-gray-300 mb-1" />
+                      <span className="text-[10px] text-gray-400 font-bold">Upload</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageChange}
+                      />
                     </label>
                   </div>
                 </div>
 
-                <div className="flex gap-4 pt-4">
-                  <Button 
-                    type="submit" 
-                    disabled={isUploading}
-                    className="flex-1 bg-[#14213D] text-[#FCA331] font-bold h-12"
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-1 bg-[#14213D] text-[#FCA331] font-bold h-11 hover:bg-[#14213D]/90"
                   >
-                    {isUploading ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving…
+                      </>
+                    ) : editingId ? (
+                      "Update Product"
                     ) : (
-                      editingId ? 'Update Product' : 'Save Product'
+                      "Save Product"
                     )}
                   </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={resetForm}
-                    className="h-12 border-gray-200"
-                  >
+                  <Button type="button" variant="outline" onClick={resetForm} className="h-11">
                     Cancel
                   </Button>
                 </div>
               </form>
-            </Card>
-          ) : (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <table className="w-full text-left">
-                <thead className="bg-gray-50 border-b border-gray-200">
+            </div>
+          )}
+
+          {/* ── Product Table ── */}
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-gray-400">Product</th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-gray-400">Specs</th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-gray-400">Price</th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-gray-400 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {loading ? (
                   <tr>
-                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Product</th>
-                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Specs</th>
-                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Price</th>
-                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Actions</th>
+                    <td colSpan={4} className="py-16 text-center">
+                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#14213D]" />
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#14213D]" />
-                      </td>
-                    </tr>
-                  ) : products.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                        No products found. Start by adding one!
-                      </td>
-                    </tr>
-                  ) : products.map(product => (
-                    <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded bg-gray-100 overflow-hidden">
-                            <img src={product.images[0]} className="h-full w-full object-cover" />
+                ) : products.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-16 text-center text-gray-400">
+                      No products yet. Click "Add Laptop" to get started.
+                    </td>
+                  </tr>
+                ) : (
+                  products.map((p) => (
+                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded bg-gray-100 overflow-hidden shrink-0">
+                            {p.images?.[0] ? (
+                              <img src={p.images[0]} className="h-full w-full object-cover" alt={p.name} />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                <ImageIcon className="h-5 w-5" />
+                              </div>
+                            )}
                           </div>
                           <div>
-                            <div className="font-bold text-[#14213D]">{product.name}</div>
-                            <div className="text-xs text-gray-500 uppercase">{product.brand}</div>
+                            <div className="font-bold text-[#14213D]">{p.name}</div>
+                            <div className="text-xs text-gray-400 uppercase">{p.brand}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-4">
                         <div className="flex flex-wrap gap-1">
-                          <Badge variant="secondary" className="text-[10px] font-normal">{product.specs.processor}</Badge>
-                          <Badge variant="secondary" className="text-[10px] font-normal">{product.specs.ram}</Badge>
+                          <Badge variant="secondary" className="text-[10px]">{p.specs?.processor}</Badge>
+                          <Badge variant="secondary" className="text-[10px]">{p.specs?.ram}</Badge>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-price">GH₵{product.price}</div>
-                        {product.badge && <Badge className="mt-1 bg-[#FCA331] text-[#14213D] h-4 text-[10px] px-1">{product.badge}</Badge>}
+                      <td className="px-5 py-4">
+                        <div className="font-bold text-green-700">GH₵{p.price}</div>
+                        {p.badge && (
+                          <Badge className="mt-1 bg-[#FCA331]/20 text-[#FCA331] border-0 text-[10px]">
+                            {p.badge}
+                          </Badge>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-5 py-4 text-right">
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
+                          <Button
+                            variant="outline"
+                            size="icon"
                             className="h-8 w-8 text-blue-600 border-blue-100 hover:bg-blue-50"
-                            onClick={() => {
-                              setEditingId(product.id);
-                              setFormData({
-                                name: product.name,
-                                brand: product.brand,
-                                price: product.price.toString(),
-                                originalPrice: product.originalPrice?.toString() || "",
-                                badge: product.badge || "",
-                                rating: product.rating.toString(),
-                                reviews: product.reviews.toString(),
-                                specs: product.specs
-                              });
-                              setImagePreviews(product.images);
-                              setIsAdding(true);
-                            }}
+                            onClick={() => handleEdit(p)}
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
+                          <Button
+                            variant="outline"
+                            size="icon"
                             className="h-8 w-8 text-red-600 border-red-100 hover:bg-red-50"
-                            onClick={() => handleDelete(product.id)}
+                            onClick={() => handleDelete(p.id, p.name)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </main>
     </div>
