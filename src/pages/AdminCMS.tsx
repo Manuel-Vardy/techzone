@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   X,
   Image as ImageIcon,
+  LogOut,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,14 @@ interface Product {
     display: string;
     graphics: string;
   };
+  details?: {
+    battery?: string;
+    weight?: string;
+    os?: string;
+    ports?: string;
+    connectivity?: string;
+    description?: string;
+  };
   updatedAt?: string;
 }
 
@@ -79,9 +88,31 @@ const emptyForm = {
     display: "",
     graphics: "",
   },
+  details: {
+    battery: "",
+    weight: "",
+    os: "",
+    ports: "",
+    connectivity: "",
+    description: "",
+  },
 };
 
+import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
+
 export default function AdminCMS() {
+  const { isAdmin, logout } = useAuth();
+  const navigate = useNavigate();
+
+  // ─── Route Protection ──────────────────────────────────────
+  useEffect(() => {
+    if (!isAdmin) {
+      toast.error("Administrators only. Please sign in.");
+      navigate("/login");
+    }
+  }, [isAdmin, navigate]);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -165,6 +196,14 @@ export default function AdminCMS() {
           display: form.specs.display.trim() || "N/A",
           graphics: form.specs.graphics.trim() || "N/A",
         },
+        details: {
+          battery: form.details.battery.trim(),
+          weight: form.details.weight.trim(),
+          os: form.details.os.trim(),
+          ports: form.details.ports.trim(),
+          connectivity: form.details.connectivity.trim(),
+          description: form.details.description.trim(),
+        },
         images: [...existingImages, ...uploadedUrls],
         updatedAt: new Date().toISOString(),
       };
@@ -211,6 +250,14 @@ export default function AdminCMS() {
       rating: String(p.rating),
       reviews: String(p.reviews),
       specs: { ...p.specs },
+      details: {
+        battery: p.details?.battery || "",
+        weight: p.details?.weight || "",
+        os: p.details?.os || "",
+        ports: p.details?.ports || "",
+        connectivity: p.details?.connectivity || "",
+        description: p.details?.description || "",
+      },
     });
     setExistingImages(p.images);
     setImageFiles([]);
@@ -227,9 +274,12 @@ export default function AdminCMS() {
     setShowForm(false);
   };
 
-  // ─── Spec helper ───────────────────────────────────────────
+  // ─── Spec & detail helpers ─────────────────────────────────
   const setSpec = (k: keyof typeof form.specs, v: string) =>
     setForm((f) => ({ ...f, specs: { ...f.specs, [k]: v } }));
+
+  const setDetail = (k: keyof typeof form.details, v: string) =>
+    setForm((f) => ({ ...f, details: { ...f.details, [k]: v } }));
 
   // ─── UI ────────────────────────────────────────────────────
   return (
@@ -253,6 +303,14 @@ export default function AdminCMS() {
               Back to Store
             </Button>
           </Link>
+          <Button 
+            variant="ghost" 
+            onClick={() => { logout(); navigate("/login"); }}
+            className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-400/10 mt-2"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Log Out
+          </Button>
         </div>
       </aside>
 
@@ -353,6 +411,41 @@ export default function AdminCMS() {
                         />
                       </div>
                     ))}
+                  </div>
+                </div>
+                {/* Extended Details (detail page only) */}
+                <div>
+                  <p className="text-xs font-bold uppercase text-gray-400 mb-1 border-b pb-1">
+                    Extended Details
+                    <span className="ml-2 normal-case font-normal text-gray-300">(visible on product detail page only)</span>
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+                    {([
+                      { key: "battery", label: "Battery Life", placeholder: "e.g. Up to 10 hrs" },
+                      { key: "weight", label: "Weight", placeholder: "e.g. 1.8 kg" },
+                      { key: "os", label: "Operating System", placeholder: "e.g. Windows 11 Home" },
+                      { key: "ports", label: "Ports", placeholder: "e.g. 2x USB-A, 1x HDMI" },
+                      { key: "connectivity", label: "Connectivity", placeholder: "e.g. Wi-Fi 6, Bluetooth 5.2" },
+                    ] as const).map(({ key, label, placeholder }) => (
+                      <div key={key}>
+                        <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">{label}</label>
+                        <Input
+                          value={form.details[key]}
+                          onChange={(e) => setDetail(key, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <label className="text-xs font-bold uppercase text-gray-400 mb-1 block">Product Description</label>
+                    <textarea
+                      rows={3}
+                      value={form.details.description}
+                      onChange={(e) => setDetail("description", e.target.value)}
+                      placeholder="Write a detailed description of this product..."
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                    />
                   </div>
                 </div>
 

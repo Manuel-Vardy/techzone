@@ -1,24 +1,66 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Star, Heart, ShoppingCart, Truck, Shield, RotateCcw, Minus, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star, Heart, ShoppingCart, Truck, Shield, RotateCcw, Minus, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { laptops } from "@/data/laptops";
+import { laptops, Laptop } from "@/data/laptops";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { MobileNav } from "@/components/MobileNav";
 import { LaptopCard } from "@/components/LaptopCard";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 const ProductDetails = () => {
   const { id } = useParams();
   const { addToCart } = useCart();
-  const laptop = laptops.find((l) => l.id === id);
+  const [laptop, setLaptop] = useState<Laptop | null>(null);
+  const [fetching, setFetching] = useState(true);
   const [currentImage, setCurrentImage] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    if (!id) { setFetching(false); return; }
+
+    // First try the static list (fast)
+    const staticMatch = laptops.find((l) => l.id === id);
+    if (staticMatch) {
+      setLaptop(staticMatch);
+      setFetching(false);
+      return;
+    }
+
+    // Not in static list → fetch from Firestore (CMS-added product)
+    const fetchFromFirestore = async () => {
+      try {
+        const snap = await getDoc(doc(db, "products", id));
+        if (snap.exists()) {
+          setLaptop({ id: snap.id, ...snap.data() } as Laptop);
+        } else {
+          setLaptop(null);
+        }
+      } catch (err) {
+        console.error("Error fetching product:", err);
+        setLaptop(null);
+      } finally {
+        setFetching(false);
+      }
+    };
+
+    fetchFromFirestore();
+  }, [id]);
+
+  if (fetching) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!laptop) {
     return (
@@ -214,6 +256,48 @@ const ProductDetails = () => {
                 </div>
               </div>
             </div>
+
+            {/* Extended Details — only shown if admin filled them in */}
+            {(laptop as any).details && Object.values((laptop as any).details).some(Boolean) && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  {(laptop as any).details.description && (
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-2">About this laptop</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {(laptop as any).details.description}
+                      </p>
+                    </div>
+                  )}
+                  {[
+                    { label: "Operating System", value: (laptop as any).details.os },
+                    { label: "Battery Life",     value: (laptop as any).details.battery },
+                    { label: "Weight",           value: (laptop as any).details.weight },
+                    { label: "Ports",            value: (laptop as any).details.ports },
+                    { label: "Connectivity",     value: (laptop as any).details.connectivity },
+                  ].filter(item => item.value).length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-3">Additional Specifications</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {[
+                          { label: "Operating System", value: (laptop as any).details.os },
+                          { label: "Battery Life",     value: (laptop as any).details.battery },
+                          { label: "Weight",           value: (laptop as any).details.weight },
+                          { label: "Ports",            value: (laptop as any).details.ports },
+                          { label: "Connectivity",     value: (laptop as any).details.connectivity },
+                        ].filter(item => item.value).map(({ label, value }) => (
+                          <div key={label} className="bg-secondary/50 rounded-lg p-3">
+                            <span className="text-xs text-muted-foreground block mb-1">{label}</span>
+                            <span className="text-sm font-medium">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             <Separator />
 
