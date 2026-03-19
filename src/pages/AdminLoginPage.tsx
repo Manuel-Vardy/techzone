@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-const LoginPage = () => {
+const AdminLoginPage = () => {
   const { loginAsAdmin } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -31,4 +31,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default AdminLoginPage;

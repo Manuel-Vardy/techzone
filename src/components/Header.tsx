@@ -223,24 +223,26 @@ export const Header = () => {
 
           {/* Desktop Nav Links */}
           <nav className="hidden md:flex items-center h-full">
-            {navLinks.map((link) => (
+            {navLinks.map((link) => {
+              const isActive = link.href === "/" ? location.pathname === "/" && !location.hash : location.pathname + location.hash === link.href;
+              return (
               <Link 
-                key={link.name} // Added key back for list rendering
+                key={link.name} 
                 to={link.href} 
                 className={cn(
-                  "text-[13px] font-black uppercase tracking-wider transition-colors relative group py-2 px-6", // Removed italic
-                  location.pathname === link.href
+                  "text-[13px] font-black uppercase tracking-wider transition-colors relative group py-2 px-6",
+                  isActive
                     ? "text-[#FCA331]" 
                     : "text-white/90 hover:text-[#FCA331]"
                 )}
               >
                 {link.name}
                 <span className={cn(
-                  "absolute -bottom-1 left-0 w-0 h-0.5 bg-[#FCA331] transition-all duration-300 group-hover:w-full",
-                  location.pathname === link.href && "w-full" // Changed link.path to link.href
+                  "absolute -bottom-1 left-0 h-0.5 bg-[#FCA331] transition-all duration-300",
+                  isActive ? "w-full" : "w-0 group-hover:w-full"
                 )} />
               </Link>
-            ))}
+            )})}
           </nav>
 
           {/* Actions - Desktop & Mobile */}
@@ -351,25 +353,40 @@ export const Header = () => {
                 <div className="p-6 flex flex-col gap-8 h-full">
                   {/* Mobile Nav Links */}
                   <nav className="flex flex-col gap-1">
-                    {navLinks.map((link) => (
+                    {navLinks.map((link) => {
+                      const isActive = link.href === "/" ? location.pathname === "/" && !location.hash : location.pathname + location.hash === link.href;
+                      return (
                       <Link
                         key={link.name}
                         to={link.href}
                         onClick={() => setIsOpen(false)}
-                        className="text-lg font-semibold text-[#14213D]/80 hover:text-[#14213D] py-3 border-b border-[#14213D]/10 flex items-center justify-between group uppercase tracking-tighter"
+                        className={cn(
+                          "text-lg font-semibold py-3 border-b border-[#14213D]/10 flex items-center justify-between group uppercase tracking-tighter transition-colors",
+                          isActive ? "text-[#FCA331]" : "text-[#14213D]/80 hover:text-[#14213D]"
+                        )}
                       >
                         {link.name}
+                        <div className={cn(
+                          "h-1 bg-[#FCA331] transition-all",
+                          isActive ? "w-8" : "w-0 group-hover:w-8"
+                        )} />
+                      </Link>
+                    )})}
+                    {!user && (
+                      <Link
+                        to="/login"
+                        onClick={() => setIsOpen(false)}
+                        className="text-lg font-semibold text-[#14213D] py-3 mt-2 border-b border-[#14213D]/10 flex items-center justify-between group uppercase tracking-tighter"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 bg-[#FCA331]/10 flex items-center justify-center rounded-full text-[#FCA331] border border-[#FCA331]/20">
+                            <User className="h-4 w-4" />
+                          </div>
+                          Sign In / Register
+                        </div>
                         <div className="h-1 w-0 bg-[#FCA331] transition-all group-hover:w-8" />
                       </Link>
-                    ))}
-                    <Link
-                      to="/#contact"
-                      onClick={() => setIsOpen(false)}
-                      className="text-lg font-semibold text-[#14213D]/80 hover:text-[#14213D] py-3 border-b border-[#14213D]/10 flex items-center justify-between group uppercase tracking-tighter"
-                    >
-                      Contact Us
-                      <div className="h-1 w-0 bg-[#FCA331] transition-all group-hover:w-8" />
-                    </Link>
+                    )}
                   </nav>
 
                   {/* Mobile Contact Info */}

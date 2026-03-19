@@ -28,55 +28,55 @@ const Logos3 = ({
       id: "logo-1",
       description: "Dell",
       image: "https://cdn.simpleicons.org/dell/0076D3",
-      className: "h-8 w-auto",
+      className: "h-10 md:h-14 w-auto",
     },
     {
       id: "logo-2",
       description: "HP",
       image: "https://cdn.simpleicons.org/hp/0096D6",
-      className: "h-8 w-auto",
+      className: "h-10 md:h-14 w-auto",
     },
     {
       id: "logo-3",
       description: "Asus",
       image: "https://cdn.simpleicons.org/asus/00539B",
-      className: "h-5 w-auto",
+      className: "h-7 md:h-10 w-auto",
     },
     {
       id: "logo-4",
       description: "Acer",
       image: "https://cdn.simpleicons.org/acer/83B81A",
-      className: "h-6 w-auto",
+      className: "h-8 md:h-12 w-auto",
     },
     {
       id: "logo-5",
       description: "MSI",
       image: "https://cdn.simpleicons.org/msi/FF0000",
-      className: "h-8 w-auto",
+      className: "h-10 md:h-14 w-auto",
     },
     {
       id: "logo-6",
       description: "Apple",
       image: "https://cdn.simpleicons.org/apple/000000",
-      className: "h-8 w-auto",
+      className: "h-10 md:h-14 w-auto",
     },
     {
       id: "logo-7",
       description: "Lenovo",
       image: "https://cdn.simpleicons.org/lenovo/E2231A",
-      className: "h-8 w-auto",
+      className: "h-10 md:h-14 w-auto",
     },
     {
       id: "logo-8",
       description: "Nvidia",
       image: "https://cdn.simpleicons.org/nvidia/76B900",
-      className: "h-6 w-auto",
+      className: "h-8 md:h-10 w-auto",
     },
     {
       id: "logo-9",
       description: "AMD",
       image: "https://cdn.simpleicons.org/amd/ED1C24",
-      className: "h-6 w-auto",
+      className: "h-8 md:h-10 w-auto",
     },
   ],
 }: Logos3Props) => {
@@ -91,7 +91,7 @@ const Logos3 = ({
         <div className="relative mx-auto flex items-center justify-center lg:max-w-5xl">
           <Carousel
             opts={{ loop: true }}
-            plugins={[AutoScroll({ playOnInit: true, speed: 1.5 })]}
+            plugins={[AutoScroll({ playOnInit: true, speed: 1.5, stopOnInteraction: false })]}
           >
             <CarouselContent className="ml-0">
               {logos.map((logo) => (
@@ -99,7 +99,7 @@ const Logos3 = ({
                   key={logo.id}
                   className="flex basis-1/3 justify-center pl-0 sm:basis-1/4 md:basis-1/5 lg:basis-1/6"
                 >
-                  <div className="mx-10 flex shrink-0 items-center justify-center grayscale opacity-50 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
+                  <div className="mx-1 md:mx-10 flex shrink-0 items-center justify-center grayscale-0 opacity-100 hover:grayscale hover:opacity-50 transition-all duration-300">
                     <div>
                       <img
                         src={logo.image}

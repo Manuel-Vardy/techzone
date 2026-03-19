@@ -109,7 +109,7 @@ export default function AdminCMS() {
   useEffect(() => {
     if (!isAdmin) {
       toast.error("Administrators only. Please sign in.");
-      navigate("/login");
+      navigate("/admin-login");
     }
   }, [isAdmin, navigate]);
 
