@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 type CheckoutFormValues = {
   name: string;
@@ -26,7 +28,7 @@ type CheckoutFormValues = {
 };
 
 const CheckoutPage = () => {
-  const { cartItems } = useCart();
+  const { cartItems, clearCart } = useCart();
   const [showForm, setShowForm] = useState(false);
 
   const form = useForm<CheckoutFormValues>({
@@ -45,10 +47,27 @@ const CheckoutPage = () => {
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const total = subtotal;
 
-  const onSubmit = (values: CheckoutFormValues) => {
-    toast.success("Order placed successfully");
-    setShowForm(false);
-    form.reset(values);
+  const onSubmit = async (values: CheckoutFormValues) => {
+    try {
+      const orderData = {
+        ...values,
+        items: cartItems,
+        subtotal,
+        total,
+        createdAt: serverTimestamp(),
+        status: "pending",
+      };
+
+      await addDoc(collection(db, "orders"), orderData);
+      
+      clearCart();
+      toast.success("Order placed successfully");
+      setShowForm(false);
+      form.reset(values);
+    } catch (error) {
+      console.error("Error placing order: ", error);
+      toast.error("Failed to place order. Please try again.");
+    }
   };
 
   return (

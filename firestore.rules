@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if the user is the owner of the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // 1. Products Collection: Anyone can read, only Admins can write
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if false; // Change to 'if true' TEMPORARILY only while seeding
+    }
+
+    // 2. Orders Collection: Anyone can create (temporarily), but only owners can read
+    match /orders/{orderId} {
+      allow create: if true; // Temporarily allow public creation while Auth is set up
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if false;
+    }
+
+    // 3. Profiles Collection: Users can read/write their own profiles
+    match /profiles/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // 4. Cart (if stored in DB): Users can read/write their own cart
+    match /carts/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
