@@ -1,4 +1,4 @@
-import { Search, ShoppingCart, Menu, User, Heart, LogOut } from "lucide-react";
+import { Search, ShoppingCart, Menu, User, Heart, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -7,14 +7,17 @@ import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverDescription,
+  PopoverBody,
+  PopoverFooter
+} from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navLinks = [
   { name: "Home", href: "/" },
@@ -89,35 +92,63 @@ export const Header = () => {
         {/* Actions */}
         <div className="flex items-center gap-2">
           {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hidden md:flex">
-                  <User className="h-5 w-5" />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" className="h-10 w-10 rounded-full p-0 overflow-hidden ring-offset-background focus-visible:ring-2 focus-visible:ring-primary/20">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user.photoURL || undefined} />
+                    <AvatarFallback className="bg-primary/5 text-primary uppercase">
+                      {user.email?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[200px]">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">Your Account</p>
-                    <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+              </PopoverTrigger>
+              <PopoverContent className="w-64" align="end" sideOffset={8}>
+                <PopoverHeader>
+                  <div className="flex items-center space-x-3">
+                    <Avatar className="h-10 w-10 shadow-sm border border-border/50">
+                      <AvatarImage src={user.photoURL || undefined} />
+                      <AvatarFallback className="bg-secondary text-primary uppercase font-bold text-base">
+                        {user.email?.charAt(0) || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="overflow-hidden">
+                      <PopoverTitle className="truncate">Your Account</PopoverTitle>
+                      <PopoverDescription className="text-xs truncate text-muted-foreground">
+                        {user.email}
+                      </PopoverDescription>
+                    </div>
                   </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/#profile" className="cursor-pointer">Profile</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/#wishlist" className="cursor-pointer">Wishlist</Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </PopoverHeader>
+                <PopoverBody className="space-y-1 px-2 py-1">
+                  <Button variant="ghost" className="w-full justify-start h-9 text-muted-foreground hover:text-foreground font-medium" size="sm" onClick={() => { navigate("/#profile"); setIsOpen(false); }}>
+                    <User className="mr-2 h-4 w-4 text-muted-foreground/70" />
+                    Profile
+                  </Button>
+                  <Button variant="ghost" className="w-full justify-start h-9 text-muted-foreground hover:text-foreground font-medium" size="sm" onClick={() => { navigate("/#wishlist"); setIsOpen(false); }}>
+                    <Heart className="mr-2 h-4 w-4 text-muted-foreground/70" />
+                    Wishlist
+                  </Button>
+                  <Button variant="ghost" className="w-full justify-start h-9 text-muted-foreground hover:text-foreground font-medium" size="sm" onClick={() => { navigate("/#settings"); setIsOpen(false); }}>
+                    <Settings className="mr-2 h-4 w-4 text-muted-foreground/70" />
+                    Settings
+                  </Button>
+                </PopoverBody>
+                <PopoverFooter className="border-t p-2 bg-muted/30">
+                  <Button
+                    variant="ghost"
+                    className="w-full h-9 text-destructive hover:text-destructive hover:bg-destructive/10 justify-start px-3 font-semibold"
+                    size="sm"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Log out
+                  </Button>
+                </PopoverFooter>
+              </PopoverContent>
+            </Popover>
           ) : (
-            <Link to="/login" className="hidden md:block">
+            <Link to="/login">
               <Button variant="ghost" size="icon">
                 <User className="h-5 w-5" />
               </Button>
@@ -127,7 +158,7 @@ export const Header = () => {
             <Button variant="ghost" size="icon" className="relative">
               <ShoppingCart className="h-5 w-5" />
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs text-accent-foreground">
+                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs text-accent-foreground shadow-sm">
                   {cartCount}
                 </span>
               )}
@@ -148,7 +179,7 @@ export const Header = () => {
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Search..."
-                    className="w-full pl-10 bg-secondary border-0"
+                    className="w-full pl-10 bg-secondary border-0 ring-offset-background"
                   />
                 </div>
 

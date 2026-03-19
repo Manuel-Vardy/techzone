@@ -5,9 +5,12 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  FacebookAuthProvider
+  FacebookAuthProvider,
+  OAuthProvider,
+  User
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Mail, Lock, ChevronRight, LogIn, UserPlus } from 'lucide-react';
 
@@ -20,6 +23,27 @@ export default function LoginScreen() {
     password: ''
   });
   const navigate = useNavigate();
+
+  const createUserProfile = async (user: User) => {
+    try {
+      const userRef = doc(db, 'profiles', user.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || '',
+          photoURL: user.photoURL || '',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+        console.log('User profile created in Firestore');
+      }
+    } catch (error) {
+      console.error('Error creating user profile:', error);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -37,7 +61,8 @@ export default function LoginScreen() {
         await signInWithEmailAndPassword(auth, formData.email, formData.password);
         toast.success('Successfully logged in!');
       } else {
-        await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        await createUserProfile(userCredential.user);
         toast.success('Account created successfully!');
       }
       navigate(-1); // Go back to previous page (likely checkout or home)
@@ -49,13 +74,21 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSocialLogin = async (providerName: 'google' | 'facebook') => {
+  const handleSocialLogin = async (providerName: 'google' | 'facebook' | 'apple') => {
     setIsLoading(true);
     try {
-      const provider = providerName === 'google' 
-        ? new GoogleAuthProvider() 
-        : new FacebookAuthProvider();
-      await signInWithPopup(auth, provider);
+      let provider;
+      if (providerName === 'google') {
+        provider = new GoogleAuthProvider();
+      } else if (providerName === 'facebook') {
+        provider = new FacebookAuthProvider();
+      } else {
+        provider = new OAuthProvider('apple.com');
+      }
+      
+      const userCredential = await signInWithPopup(auth, provider);
+      await createUserProfile(userCredential.user);
+      
       toast.success(`Successfully logged in with ${providerName}!`);
       navigate(-1);
     } catch (error: any) {
@@ -219,11 +252,11 @@ export default function LoginScreen() {
           </div>
 
           {/* Social login buttons */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4 pt-2">
             <button 
               onClick={() => handleSocialLogin('google')}
               disabled={isLoading}
-              className="flex items-center justify-center px-4 py-3 border border-border rounded-xl hover:bg-secondary transition-colors font-medium text-sm gap-2"
+              className="w-full flex items-center justify-center px-4 py-3 border border-border rounded-xl hover:bg-secondary transition-colors font-medium text-sm gap-3"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -231,35 +264,7 @@ export default function LoginScreen() {
                 <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              Gmail
-            </button>
-            <button 
-              onClick={() => handleSocialLogin('facebook')}
-              disabled={isLoading}
-              className="flex items-center justify-center px-4 py-3 border border-border rounded-xl hover:bg-secondary transition-colors font-medium text-sm gap-2"
-            >
-              <svg className="w-5 h-5" fill="#1877f2" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-              </svg>
-              Facebook
-            </button>
-            <button 
-              onClick={() => handleSocialLogin('apple' as any)}
-              disabled={isLoading}
-              className="flex items-center justify-center px-4 py-3 border border-border rounded-xl hover:bg-secondary transition-colors font-medium text-sm gap-2"
-            >
-              <svg className="w-5 h-5 fill-current" viewBox="0 0 384 512">
-                <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4.7 184.2 4.7 273.3c0 26.2 4.8 52.1 14.4 77.4 12.8 33.6 35.7 70.5 56.4 70.5 12.3 0 21.6-4.5 32.7-10.2 11.1-5.7 22.2-11.4 34.5-11.4 12 0 23.6 5.7 34.1 11.4 10.5 5.7 19.8 10.2 32.1 10.2 23 0 48.3-43.1 57.5-67.6-54.2-24.3-64.4-78.5-64.5-78.5zM260.8 115c15.4-18.6 25.9-44.4 23.1-69.9-22 1-47.3 14.8-63 33.3-14.1 16.4-26.5 42.9-23.6 67.8 24.3 1.9 47.9-12.2 63.5-31.2z"/>
-              </svg>
-              iCloud
-            </button>
-            <button 
-              onClick={() => handleSocialLogin('google')}
-              disabled={isLoading}
-              className="flex items-center justify-center px-4 py-3 border border-border rounded-xl hover:bg-secondary transition-colors font-medium text-sm gap-2"
-            >
-              <Mail className="w-5 h-5 text-primary" />
-              Email
+              Sign up with Gmail
             </button>
           </div>
         </div>
