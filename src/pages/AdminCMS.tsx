@@ -101,42 +101,75 @@ export default function AdminCMS() {
     }
 
     setIsUploading(true);
+    const toastId = toast.loading("Starting product save...");
+    
     try {
       // 1. Upload Images
       const imageUrls: string[] = [];
-      for (const image of images) {
-        const storageRef = ref(storage, `products/${Date.now()}_${image.name}`);
-        const snapshot = await uploadBytes(storageRef, image);
-        const url = await getDownloadURL(snapshot.ref);
-        imageUrls.push(url);
+      if (images.length > 0) {
+        toast.loading(`Uploading ${images.length} image(s)...`, { id: toastId });
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+          const storageRef = ref(storage, `products/${Date.now()}_${image.name}`);
+          const snapshot = await uploadBytes(storageRef, image);
+          const url = await getDownloadURL(snapshot.ref);
+          imageUrls.push(url);
+          toast.loading(`Uploaded image ${i + 1} of ${images.length}`, { id: toastId });
+        }
       }
+
+      // 2. Prepare Data
+      toast.loading("Preparing product data...", { id: toastId });
+      const parsedPrice = parseFloat(formData.price);
+      const parsedRating = parseFloat(formData.rating);
+      const parsedReviews = parseInt(formData.reviews);
+
+      if (isNaN(parsedPrice)) throw new Error("Invalid Price value");
 
       const productData = {
         name: formData.name,
         brand: formData.brand,
-        price: parseFloat(formData.price),
-        originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
-        badge: formData.badge,
-        rating: parseFloat(formData.rating),
-        reviews: parseInt(formData.reviews),
-        specs: formData.specs,
-        images: editingId ? [...products.find(p => p.id === editingId)!.images, ...imageUrls] : imageUrls,
+        price: parsedPrice,
+        originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : null,
+        badge: formData.badge || "",
+        rating: isNaN(parsedRating) ? 4.5 : parsedRating,
+        reviews: isNaN(parsedReviews) ? 0 : parsedReviews,
+        specs: {
+          processor: formData.specs.processor || "N/A",
+          ram: formData.specs.ram || "N/A",
+          storage: formData.specs.storage || "N/A",
+          display: formData.specs.display || "N/A",
+          graphics: formData.specs.graphics || "N/A"
+        },
+        images: editingId 
+          ? [...(products.find(p => p.id === editingId)?.images || []), ...imageUrls] 
+          : imageUrls,
         updatedAt: new Date().toISOString()
       };
 
+      // 3. Save to Firestore
+      toast.loading("Writing to database...", { id: toastId });
       if (editingId) {
         await updateDoc(doc(db, "products", editingId), productData);
-        toast.success("Product updated successfully!");
+        toast.success("Product updated successfully!", { id: toastId });
       } else {
         await addDoc(collection(db, "products"), productData);
-        toast.success("Product added successfully!");
+        toast.success(`${productData.name} added to inventory!`, { id: toastId });
       }
 
       resetForm();
       fetchProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving product:", error);
-      toast.error("Failed to save product");
+      let message = error.message || "Unknown error";
+      
+      if (error.code === 'permission-denied') {
+        message = "Permission denied. Check Firestore rules.";
+      } else if (error.code === 'storage/unauthorized') {
+        message = "Storage permission denied. Check Storage rules.";
+      }
+      
+      toast.error(`Save failed: ${message}`, { id: toastId });
     } finally {
       setIsUploading(false);
     }
